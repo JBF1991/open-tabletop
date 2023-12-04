@@ -1,8 +1,6 @@
 import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.awt.GridLayout;
-import java.awt.LayoutManager;
-import java.awt.event.ActionListener;
 import java.awt.event.KeyEvent;
 import java.io.BufferedReader;
 import java.io.DataOutputStream;
@@ -13,19 +11,12 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.net.HttpURLConnection;
-import java.net.URI;
 import java.net.URL;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse.BodyHandler;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
-import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Base64;
-import java.util.HashMap;
-import java.util.Map;
-
+import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.ImageIcon;
 import javax.swing.JButton;
@@ -48,12 +39,21 @@ import org.bspfsystems.simplejson.parser.JSONParser;
 
 public class OpenTabletop extends JPanel {
 
+    private static boolean isAppReady = false;
+    private Dimension shortRow = new Dimension(12000, 40);
+    private Dimension tallRow = new Dimension(12000, 120);
+    private Dimension hugeRow = new Dimension(12000, 480);
+
+
+    // Panels
     JComponent systemsPanel, worldPanel, questsPanel, charactersPanel, itemsPanel, settingsPanel;
 
     // Serial Order
     JComboBox<String> styleCombo;
-    JTextField keyfilenameField;
     JTextArea regenWorldArea;
+    JComboBox<String> textModelBox;
+    JComboBox<String> imageModelBox;
+    JTextField keyfilenameField;
     public static void main(String[] args) {
         //Schedule a job for the event dispatch thread:
         //creating and showing this application's GUI.
@@ -62,6 +62,7 @@ public class OpenTabletop extends JPanel {
                 //Turn off metal's use of bold fonts
                 UIManager.put("swing.boldMetal", Boolean.FALSE);
                 createAndShowGUI();
+                isAppReady = true;
             }
         });
     }
@@ -84,24 +85,27 @@ public class OpenTabletop extends JPanel {
         JTabbedPane tabbedPane = new JTabbedPane();
         ImageIcon icon = createImageIcon("images/middle.gif");
         systemsPanel = makeTextPanel("Panel #1");
+        systemsPanel.setLayout(new BoxLayout(systemsPanel, BoxLayout.PAGE_AXIS));
         tabbedPane.addTab("Systems", icon, systemsPanel,"Does nothing");
         tabbedPane.setMnemonicAt(0, KeyEvent.VK_1);
         worldPanel = makeTextPanel("Panel #2");
-        worldPanel.setLayout(new BoxLayout(worldPanel, BoxLayout.LINE_AXIS));
+        worldPanel.setLayout(new BoxLayout(worldPanel, BoxLayout.PAGE_AXIS));
         tabbedPane.addTab("World", icon, worldPanel,"Does twice as much nothing");
         tabbedPane.setMnemonicAt(1, KeyEvent.VK_2);
         questsPanel = makeTextPanel("Panel #3");
+        questsPanel.setLayout(new BoxLayout(questsPanel, BoxLayout.PAGE_AXIS));
         tabbedPane.addTab("Quests", icon, questsPanel, "Still does nothing");
         tabbedPane.setMnemonicAt(2, KeyEvent.VK_3);
         charactersPanel = makeTextPanel("Panel #4 (has a preferred size of 410 x 50).");
-        charactersPanel.setPreferredSize(new Dimension(410, 50));
+        charactersPanel.setLayout(new BoxLayout(charactersPanel, BoxLayout.PAGE_AXIS));
         tabbedPane.addTab("Characters", icon, charactersPanel, "Does nothing at all");
         tabbedPane.setMnemonicAt(3, KeyEvent.VK_4);
         itemsPanel = makeTextPanel("Panel #5");
+        itemsPanel.setLayout(new BoxLayout(itemsPanel, BoxLayout.PAGE_AXIS));
         tabbedPane.addTab("Items", icon, itemsPanel, "Does nothing at all");
         tabbedPane.setMnemonicAt(4, KeyEvent.VK_5);
         settingsPanel = makeTextPanel("Panel #6");
-        settingsPanel.setLayout(new BoxLayout(settingsPanel, BoxLayout.LINE_AXIS));
+        settingsPanel.setLayout(new BoxLayout(settingsPanel, BoxLayout.PAGE_AXIS));
         tabbedPane.addTab("Settings", icon, settingsPanel, "Does nothing at all");
         tabbedPane.setMnemonicAt(5, KeyEvent.VK_6);
         //Add the tabbed pane to this panel.
@@ -126,6 +130,8 @@ public class OpenTabletop extends JPanel {
             JSONObject obj = (JSONObject)JSONParser.deserialize(jsonString);
             styleCombo.setSelectedItem(obj.getString("style"));
             regenWorldArea.setText(obj.getString("world"));
+            textModelBox.setSelectedItem(obj.getString("text-model"));
+            imageModelBox.setSelectedItem(obj.getString("image-model"));
             keyfilenameField.setText(obj.getString("openai-api-key"));
         } catch (IOException e) {
             e.printStackTrace();
@@ -135,12 +141,17 @@ public class OpenTabletop extends JPanel {
     }
 
     protected void saveData() {
+        if (this.isAppReady == false) {
+            return;
+        }
         try {
             PrintWriter out = new PrintWriter("data.json");
             String jsonTemplate = """
             {
                 "style" : "%s",
                 "world" : "%s",
+                "text-model" : "%s",
+                "image-model" : "%s",
                 "openai-api-key" : "%s"
             }
             """;
@@ -148,6 +159,8 @@ public class OpenTabletop extends JPanel {
                 jsonTemplate, 
                 styleCombo.getSelectedItem().toString(),
                 regenWorldArea.getText().replaceAll("\n", "\\\\n"),
+                textModelBox.getSelectedItem().toString(),
+                imageModelBox.getSelectedItem().toString(),
                 keyfilenameField.getText()
             );
             out.println(json);
@@ -163,11 +176,12 @@ public class OpenTabletop extends JPanel {
         question = question.replaceAll("\n", "\\\\n");
         question = "\"" + question + "\"";
         format = "\"" + format + "\"";
+        String textModel = "\""+textModelBox.getSelectedItem().toString() + "\",";
         String styleof = styleCombo.getSelectedItem().toString();
         String styleprimer = "\"You are a creative narrator for a tabletop role playing game. You are narrating in the style of "+styleof+".\"";
         String body = """
             {
-                "model": "gpt-3.5-turbo",
+                "model": """+textModel+"""
                 "messages": [
                   {
                     "role": "system",
@@ -215,6 +229,7 @@ public class OpenTabletop extends JPanel {
                 response.append('\r');
             }
             rd.close();
+            connection.disconnect();
             String jsonString = response.toString();
             JSONObject obj = (JSONObject)JSONParser.deserialize(jsonString);
             String message = obj.getArray("choices").getObject(0).getObject("message").getString("content");
@@ -232,6 +247,7 @@ public class OpenTabletop extends JPanel {
 
     protected void setupPanels() {
         // SYSTEM PANEL
+        JPanel systemsRow1 = new JPanel(); systemsRow1.setMaximumSize(shortRow);
         String[] choices = { 
             "Arthur C. Clarke",
             "C3PO",
@@ -262,11 +278,16 @@ public class OpenTabletop extends JPanel {
         styleCombo.addActionListener(e -> {
             saveData();
         });
-        systemsPanel.add(new JLabel("In The Style Of:"));
-        systemsPanel.add(styleCombo);
+        systemsRow1.add(new JLabel("In The Style Of:"));
+        systemsRow1.add(styleCombo);
+        systemsPanel.add(systemsRow1);
+        systemsPanel.add(Box.createGlue());
         // WORLD PANEL
+        JPanel worldRow1 = new JPanel(); worldRow1.setMaximumSize(hugeRow);
         regenWorldArea = new JTextArea();
         regenWorldArea.setLineWrap(true);
+        regenWorldArea.setRows(20);
+        regenWorldArea.setColumns(80);
         regenWorldArea.setMaximumSize(new Dimension(640, 480));
         regenWorldArea.getDocument().addDocumentListener(new DocumentListener() {
             @Override
@@ -283,7 +304,7 @@ public class OpenTabletop extends JPanel {
             }
         });
         JButton regenWorldButton = new JButton("Regen");
-        regenWorldButton.setMaximumSize(new Dimension(640, 30));
+        regenWorldButton.setMaximumSize(new Dimension(120, 30));
         regenWorldButton.addActionListener(e -> {
             String format = "Rewrite and expand on the next world description. Be sure to format your next answer in a few paragraphs.";
             String currentDescription = regenWorldArea.getText();
@@ -294,9 +315,38 @@ public class OpenTabletop extends JPanel {
             regenWorldArea.setText(response);
             saveData();
         });
-        worldPanel.add(regenWorldButton);
-        worldPanel.add(regenWorldArea);
+        worldRow1.add(regenWorldButton);
+        worldRow1.add(regenWorldArea);
+        worldPanel.add(worldRow1);
+        worldPanel.add(Box.createGlue());
         // SETTINGS PANEL
+        JPanel settingsRow1 = new JPanel(); settingsRow1.setMaximumSize(shortRow);
+        JPanel settingsRow2 = new JPanel(); settingsRow2.setMaximumSize(shortRow);
+        JPanel settingsRow3 = new JPanel(); settingsRow3.setMaximumSize(shortRow);
+        String[] textModelChoices = { 
+            "gpt-3.5",
+            "gpt-3.5-turbo",
+            "gpt-4",
+            "gpt-4-32k"
+        };
+        textModelBox = new JComboBox<String>(textModelChoices);
+        textModelBox.setSelectedIndex(0);
+        textModelBox.addActionListener(e -> {
+            saveData();
+        });
+        String[] imageModelChoices = { 
+            "dall-e-2",
+            "dall-e-3"
+        };
+        imageModelBox = new JComboBox<String>(imageModelChoices);
+        imageModelBox.setSelectedIndex(0);
+        imageModelBox.addActionListener(e -> {
+            saveData();
+        });
+        settingsRow1.add(new JLabel("Text Model:"));
+        settingsRow1.add(textModelBox);
+        settingsRow2.add(new JLabel("Image Model:"));
+        settingsRow2.add(imageModelBox);
         JFileChooser fc = new JFileChooser();
         fc.setFileHidingEnabled(false);
         JButton openButton = new JButton("OpenAI API Keyfile");
@@ -313,8 +363,12 @@ public class OpenTabletop extends JPanel {
                     saveData();
                 }
         });
-        settingsPanel.add(openButton);
-        settingsPanel.add(keyfilenameField);
+        settingsRow3.add(openButton);
+        settingsRow3.add(keyfilenameField);
+        settingsPanel.add(settingsRow1);
+        settingsPanel.add(settingsRow2);
+        settingsPanel.add(settingsRow3);
+        settingsPanel.add(Box.createVerticalGlue());
     }
 
     protected JComponent makeTextPanel(String text) {
