@@ -2,12 +2,14 @@ package open.tabletop.ui.tabPanels;
 
 import java.awt.Dimension;
 import java.awt.event.KeyEvent;
+import java.util.concurrent.CompletableFuture;
 
 import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.ImageIcon;
 import javax.swing.JButton;
 import javax.swing.JComponent;
+
 import javax.swing.JPanel;
 import javax.swing.JTabbedPane;
 import javax.swing.JTextArea;
@@ -67,10 +69,18 @@ public class RegenWorldPanel {
             if (currentDescription.trim().length() == 0) {
                 currentDescription = "A random world of curiousity.";
             }
-            String response = this.completionService.requestBasicWorld(format, currentDescription);
-            regenWorldArea.setText(response);
-            ApplicationData.get().setWorld(response);
-            ApplicationData.save();
+
+            CompletableFuture<String> completionFuture = this.completionService.requestBasicWorld(format, currentDescription);
+
+            completionFuture.whenComplete((response, ex) -> {
+                regenWorldArea.setText(response);
+                ApplicationData.get().setWorld(response);
+                ApplicationData.save();
+            });
+
+            while (!completionFuture.isDone()) {
+                //TODO: Present loading animation of some kind. 
+            }
         });
 
         worldRow1.add(regenWorldButton);
@@ -78,7 +88,6 @@ public class RegenWorldPanel {
         worldPanel.add(worldRow1);
         worldPanel.add(Box.createGlue());
 
-        
         worldPanel.setLayout(new BoxLayout(worldPanel, BoxLayout.PAGE_AXIS));
         tabbedPane.addTab("World", icon, worldPanel,"Does twice as much nothing");
         tabbedPane.setMnemonicAt(1, KeyEvent.VK_2);

@@ -7,6 +7,7 @@ import java.net.http.HttpResponse;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 
 import com.google.gson.Gson; 
 import com.google.gson.GsonBuilder;
@@ -33,7 +34,7 @@ public class Completion {
         return this;
     }
 
-    public ChatCompletionResult getCompletion() {
+    public CompletableFuture<ChatCompletionResult> getCompletion() {
         ChatCompletionRequest req = ChatCompletionRequest.builder()
                 .model(config.getModel())
                 .messages(new ArrayList<>(messages.values()))
@@ -52,15 +53,13 @@ public class Completion {
                 .POST(HttpRequest.BodyPublishers.ofString(body))
                 .build();
 
-            HttpResponse<ChatCompletionResult> response = HttpClient
+            CompletableFuture<ChatCompletionResult> response = HttpClient
                 .newHttpClient()
-                .send(chatCompletionsPost, new JsonBodyHandler<>(ChatCompletionResult.class));
+                .sendAsync(chatCompletionsPost, new JsonBodyHandler<>(ChatCompletionResult.class))
+                .thenApply(HttpResponse::body);
 
-            if (response.statusCode() > 299) {
-                System.out.println(response.statusCode());
-                System.out.println(response.body());
-            }
-            return response.body();
+            return response;
+            
         } catch (Exception e) {
             e.printStackTrace();
             return null;
