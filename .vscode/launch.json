@@ -8,7 +8,7 @@
             "type": "java",
             "name": "Current File",
             "request": "launch",
-            "mainClass": "OpenTabletop"
+            "mainClass": "open.tabletop.OpenTabletop"
         }
     ]
 }
